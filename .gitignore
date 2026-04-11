@@ -1,0 +1,77 @@
+# =========================
+# Flutter / Dart
+# =========================
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub/
+.pub-cache/
+build/
+coverage/
+
+# Generated docs and symbols
+doc/api/
+app.*.symbols
+app.*.map.json
+
+# =========================
+# IDE / Editor
+# =========================
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Keep if your team uses shared VS Code config.
+# Remove # below if you want to ignore .vscode completely.
+# .vscode/
+
+# =========================
+# OS / Misc
+# =========================
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+*.class
+.history/
+.svn/
+.atom/
+.build/
+.buildlog/
+migrate_working_dir/
+
+# =========================
+# Android / iOS build artifacts
+# =========================
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+
+ios/Flutter/.last_build_id
+ios/Pods/
+ios/.symlinks/
+
+# =========================
+# Platform build folders
+# =========================
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# =========================
+# Secrets / local env files
+# =========================
+.env
+.env.*
+*.keystore
+*.jks
+key.properties
+google-services.json
+GoogleService-Info.plist
+
