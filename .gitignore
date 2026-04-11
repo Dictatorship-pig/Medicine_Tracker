@@ -25,7 +25,7 @@ app.*.map.json
 
 # Keep if your team uses shared VS Code config.
 # Remove # below if you want to ignore .vscode completely.
-# .vscode/
+.vscode/
 
 # =========================
 # OS / Misc
