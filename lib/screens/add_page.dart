@@ -1,7 +1,9 @@
-import 'dart:io'; // 👇 1. 用来处理本地文件 (照片)
+﻿import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:image_picker/image_picker.dart'; // 👇 2. 引入相机相册工具
+import 'package:image_picker/image_picker.dart';
+
 import '../models/medicine.dart';
 import '../services/notification_service.dart';
 
@@ -13,39 +15,29 @@ class AddMedicinePage extends StatefulWidget {
 }
 
 class _AddMedicinePageState extends State<AddMedicinePage> {
-  // 👇 3. 采用你精简后的 4 大分类！
-  String selectedType = '处方药 (Rx)';
-  final List<String> medicineTypes = ['处方药 (Rx)', '非处方药 (OTC)', '保健品', '其他'];
+  final List<String> _medicineTypes = ['处方药 (Rx)', '非处方药 (OTC)', '保健品', '其他'];
+  final List<String> _mealTypes = ['饭前', '饭后', '随餐', '空腹', '按需'];
+  final List<String> _unitPresets = ['片', '粒', '包', '支', '瓶', '袋', 'ml', 'g', '次'];
 
-  String selectedMeal = '饭后';
-  final List<String> mealTypes = ['饭前', '饭后', '随餐', '空腹'];
+  String _selectedType = '处方药 (Rx)';
+  String _selectedMeal = '按需';
+  String _selectedUnitPreset = '片';
 
+  bool _trackInventory = true;
   DateTime? _selectedDate;
-
-  // --- 图片相关的变量和方法 ---
-  File? _imageFile; // 用来存放选中的照片
+  File? _imageFile;
   final ImagePicker _picker = ImagePicker();
 
-  // 呼叫相机或相册的方法
-  Future<void> _pickImage(ImageSource source) async {
-    final XFile? pickedFile = await _picker.pickImage(
-      source: source,
-      maxWidth: 800, // 压缩一下图片，防止把手机内存撑爆
-      imageQuality: 85,
-    );
-
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path); // 把拍好的照片存起来，让屏幕刷新显示
-      });
-    }
-  }
-
-  // --- 输入框监听器 ---
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _totalCountController = TextEditingController();
-  final TextEditingController _frequencyController = TextEditingController();
-  final TextEditingController _dosageController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _totalCountController = TextEditingController();
+  final _frequencyController = TextEditingController();
+  final _dosageController = TextEditingController();
+  final _unitCustomController = TextEditingController();
+  final _usageInstructionController = TextEditingController();
+  final _specificationController = TextEditingController();
+  final _noteController = TextEditingController();
+  final _batchNoController = TextEditingController();
+  final _lowStockThresholdController = TextEditingController(text: '10');
 
   @override
   void dispose() {
@@ -53,109 +45,178 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
     _totalCountController.dispose();
     _frequencyController.dispose();
     _dosageController.dispose();
+    _unitCustomController.dispose();
+    _usageInstructionController.dispose();
+    _specificationController.dispose();
+    _noteController.dispose();
+    _batchNoController.dispose();
+    _lowStockThresholdController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final pickedFile = await _picker.pickImage(
+      source: source,
+      maxWidth: 1000,
+      imageQuality: 85,
+    );
+    if (pickedFile != null) {
+      setState(() => _imageFile = File(pickedFile.path));
+    }
+  }
+
+  String _dateText(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<void> _save() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请至少填写药品名称')),
+      );
+      return;
+    }
+
+    final medicine = Medicine(
+      name: _nameController.text.trim(),
+      type: _selectedType,
+      expiryDate: _selectedDate == null ? null : _dateText(_selectedDate!),
+      totalCount: _trackInventory ? (int.tryParse(_totalCountController.text.trim()) ?? 0) : 0,
+      frequency: int.tryParse(_frequencyController.text.trim()) ?? 0,
+      dosage: int.tryParse(_dosageController.text.trim()) ?? 0,
+      mealRelation: _selectedMeal,
+      imagePath: _imageFile?.path,
+      lastUpdateDate: DateTime.now(),
+      unitPreset: _selectedUnitPreset,
+      unitCustom: _unitCustomController.text.trim(),
+      usageInstruction: _usageInstructionController.text.trim(),
+      specification: _specificationController.text.trim(),
+      note: _noteController.text.trim(),
+      batchNo: _batchNoController.text.trim(),
+      lowStockThreshold: int.tryParse(_lowStockThresholdController.text.trim()) ?? 10,
+      trackInventory: _trackInventory,
+    );
+
+    final box = Hive.box<Medicine>('medicines');
+    await box.add(medicine);
+
+    if (box.isNotEmpty) {
+      await NotificationService.enableGlobalReminders();
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('药品已保存')),
+    );
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('添加新药品'),
+        title: const Text('新增药品'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            // ==========================================
-            // 👇 新增的 UI：照片展示与上传区域 (极其适合中老年人)
-            // ==========================================
             Container(
-              height: 200,
+              height: 180,
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
+                color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.grey.shade400,
-                  style: BorderStyle.solid,
-                ),
+                border: Border.all(color: Colors.grey.shade300),
               ),
-              child: _imageFile != null
-                  // 如果有照片，就铺满显示出来
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        _imageFile!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      ),
+              child: _imageFile == null
+                  ? const Center(
+                      child: Text('可选：拍照留存药盒外观'),
                     )
-                  // 如果没照片，显示提示文字
-                  : const Center(
-                      child: Text(
-                        '📷 拍一张药盒照片\n防止以后吃错药',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
-                      ),
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(_imageFile!, fit: BoxFit.cover),
                     ),
             ),
-            const SizedBox(height: 12),
-            // 拍照和相册的两个大按钮
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.camera), // 调起相机
+                    onPressed: () => _pickImage(ImageSource.camera),
                     icon: const Icon(Icons.camera_alt),
                     label: const Text('拍照'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _pickImage(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('相册'),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 28),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: '药品名称（必填）',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.medication_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedType,
+              decoration: const InputDecoration(
+                labelText: '分类',
+                border: OutlineInputBorder(),
+              ),
+              items: _medicineTypes
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _selectedType = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedUnitPreset,
+                    decoration: const InputDecoration(
+                      labelText: '单位（预设）',
+                      border: OutlineInputBorder(),
                     ),
+                    items: _unitPresets
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedUnitPreset = value);
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.gallery), // 调起相册
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('相册'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: TextField(
+                    controller: _unitCustomController,
+                    decoration: const InputDecoration(
+                      labelText: '自定义单位（可空）',
+                      border: OutlineInputBorder(),
                     ),
                   ),
                 ),
               ],
             ),
-            const Divider(height: 40, thickness: 2),
-
-            // ==========================================
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '药品名称 (必填)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.medical_information),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 👇 这里已经自动变成了你的 4 大分类
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: '药品分类',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.category),
-              ),
-              initialValue: selectedType,
-              items: medicineTypes
-                  .map(
-                    (type) => DropdownMenuItem(value: type, child: Text(type)),
-                  )
-                  .toList(),
-              onChanged: (newValue) => setState(() => selectedType = newValue!),
-            ),
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -163,140 +224,142 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                     controller: _frequencyController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: '一天几次',
+                      labelText: '每日次数（可空）',
                       border: OutlineInputBorder(),
-                      suffixText: '次',
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _dosageController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: '一次几粒',
+                      labelText: '每次量（可空）',
                       border: OutlineInputBorder(),
-                      suffixText: '粒/片',
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _totalCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '药品总量',
-                      border: OutlineInputBorder(),
-                      suffixText: '粒/片',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: '服用时机',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialValue: selectedMeal,
-                    items: mealTypes
-                        .map(
-                          (type) =>
-                              DropdownMenuItem(value: type, child: Text(type)),
-                        )
-                        .toList(),
-                    onChanged: (newValue) =>
-                        setState(() => selectedMeal = newValue!),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedMeal,
+              decoration: const InputDecoration(
+                labelText: '服药时机（可空）',
+                border: OutlineInputBorder(),
+              ),
+              items: _mealTypes
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _selectedMeal = value);
+              },
             ),
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () async {
-                DateTime? pickedDate = await showDatePicker(
+                final pickedDate = await showDatePicker(
                   context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime(2050),
+                  initialDate: _selectedDate ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
                 );
                 if (pickedDate != null) {
                   setState(() => _selectedDate = pickedDate);
                 }
               },
-              icon: const Padding(
-                padding: EdgeInsets.only(left: 12.0),
-                child: Icon(Icons.calendar_month),
-              ),
-              label: Padding(
-                padding: const EdgeInsets.only(left: 12.0),
-                child: Text(
-                  _selectedDate == null
-                      ? '点击选择保质期 (必填)'
-                      : '保质期至：${_selectedDate.toString().split(' ')[0]}',
-                  style: const TextStyle(fontSize: 16),
+              icon: const Icon(Icons.calendar_month),
+              label: Text(_selectedDate == null ? '保质期（可空）' : '保质期：${_dateText(_selectedDate!)}'),
+            ),
+            if (_selectedDate != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => setState(() => _selectedDate = null),
+                  child: const Text('清空保质期'),
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                alignment: Alignment.centerLeft,
+            const Divider(height: 28),
+            SwitchListTile(
+              title: const Text('按库存管理'),
+              subtitle: const Text('关闭后不计算余量与低库存状态'),
+              value: _trackInventory,
+              onChanged: (value) => setState(() => _trackInventory = value),
+            ),
+            if (_trackInventory) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _totalCountController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: '总量',
+                        border: const OutlineInputBorder(),
+                        suffixText: _unitCustomController.text.trim().isNotEmpty
+                            ? _unitCustomController.text.trim()
+                            : _selectedUnitPreset,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _lowStockThresholdController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '低库存阈值',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _specificationController,
+              decoration: const InputDecoration(
+                labelText: '规格（可空）',
+                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 40),
-
+            const SizedBox(height: 12),
+            TextField(
+              controller: _usageInstructionController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: '用法描述（可空）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _batchNoController,
+              decoration: const InputDecoration(
+                labelText: '批次（可空）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: '备注（可空）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
             FilledButton(
-              onPressed: () async {
-                if (_nameController.text.isEmpty || _selectedDate == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('⚠️ 请填写药品名称并选择保质期！')),
-                  );
-                  return;
-                }
-
-                // 1. 打包药品数据
-                final newMedicine = Medicine(
-                  name: _nameController.text,
-                  type: selectedType,
-                  expiryDate: _selectedDate.toString().split(' ')[0],
-                  totalCount: int.tryParse(_totalCountController.text) ?? 0,
-                  frequency: int.tryParse(_frequencyController.text) ?? 0,
-                  dosage: int.tryParse(_dosageController.text) ?? 0,
-                  mealRelation: selectedMeal,
-                  imagePath: _imageFile?.path,
-                  lastUpdateDate: DateTime.now(),
-                );
-
-                var box = Hive.box<Medicine>('medicines');
-                await box.add(newMedicine); // 存入数据库
-
-                // ==========================================
-                // 👇 2. 极简逻辑：只要添加了药，就无脑开启全局提醒！
-                // (如果之前已经开启过，系统会自动用同样的ID覆盖，不会重复)
-                // ==========================================
-                await NotificationService.enableGlobalReminders();
-
-                if (!context.mounted) return;
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✅ 药品添加成功，已为您开启每日用药提醒！')),
-                );
-                Navigator.pop(context);
-              },
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text(
-                '保存到我的药箱',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              onPressed: _save,
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              child: const Text('保存药品'),
             ),
           ],
         ),

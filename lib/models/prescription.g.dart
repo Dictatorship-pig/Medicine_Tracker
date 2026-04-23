@@ -27,13 +27,14 @@ class PrescriptionAdapter extends TypeAdapter<Prescription> {
       careNotes: fields[7] as String,
       items: (fields[8] as List).cast<PrescriptionItem>(),
       createdAt: fields[9] as DateTime,
+      isStopped: fields[10] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Prescription obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +54,9 @@ class PrescriptionAdapter extends TypeAdapter<Prescription> {
       ..writeByte(8)
       ..write(obj.items)
       ..writeByte(9)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(10)
+      ..write(obj.isStopped);
   }
 
   @override
@@ -84,22 +87,23 @@ class PrescriptionItemAdapter extends TypeAdapter<PrescriptionItem> {
       days: fields[3] as int,
       mealRelation: fields[4] as String,
       remark: fields[5] as String,
-      scheduleType: (fields[6] as String?) ?? 'daily',
-      weekDays: fields[7] != null
-          ? List<int>.from((fields[7] as List).cast<int>())
-          : <int>[],
-      durationCount: (fields[8] as int?) ?? 1,
-      durationUnit: (fields[9] as String?) ?? '天',
-      completedDates: fields[10] != null
-          ? List<String>.from((fields[10] as List).cast<String>())
-          : <String>[],
+      scheduleType: fields[6] as String,
+      weekDays: (fields[7] as List?)?.cast<int>(),
+      durationCount: fields[8] as int,
+      durationUnit: fields[9] as String,
+      completedDates: (fields[10] as List?)?.cast<String>(),
+      medicineRefId: fields[11] as String?,
+      medicineNameSnapshot: fields[12] as String?,
+      unitPreset: fields[13] as String,
+      unitCustom: fields[14] as String,
+      instructionText: fields[15] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, PrescriptionItem obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.medicineName)
       ..writeByte(1)
@@ -121,7 +125,17 @@ class PrescriptionItemAdapter extends TypeAdapter<PrescriptionItem> {
       ..writeByte(9)
       ..write(obj.durationUnit)
       ..writeByte(10)
-      ..write(obj.completedDates);
+      ..write(obj.completedDates)
+      ..writeByte(11)
+      ..write(obj.medicineRefId)
+      ..writeByte(12)
+      ..write(obj.medicineNameSnapshot)
+      ..writeByte(13)
+      ..write(obj.unitPreset)
+      ..writeByte(14)
+      ..write(obj.unitCustom)
+      ..writeByte(15)
+      ..write(obj.instructionText);
   }
 
   @override

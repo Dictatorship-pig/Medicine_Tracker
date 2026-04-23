@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/prescription.dart';
@@ -50,7 +50,7 @@ class PrescriptionListPage extends StatelessWidget {
                   ),
                   subtitle: Text(
                     '就诊：${_dateText(prescription.visitDate)}\n'
-                    '药品：${prescription.items.length} 项  |  $followUpText',
+                    '药品：${prescription.items.length} 项  |  状态：${prescription.treatmentStatusText()}  |  $followUpText',
                   ),
                   isThreeLine: true,
                   trailing: const Icon(Icons.chevron_right),

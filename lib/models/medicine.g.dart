@@ -19,20 +19,28 @@ class MedicineAdapter extends TypeAdapter<Medicine> {
     return Medicine(
       name: fields[0] as String,
       type: fields[1] as String,
-      expiryDate: fields[2] as String,
+      expiryDate: fields[2] as String?,
       totalCount: fields[3] as int,
       frequency: fields[4] as int,
       dosage: fields[5] as int,
       mealRelation: fields[6] as String,
       imagePath: fields[7] as String?,
       lastUpdateDate: fields[8] as DateTime,
+      unitPreset: fields[9] as String,
+      unitCustom: fields[10] as String,
+      usageInstruction: fields[11] as String,
+      specification: fields[12] as String,
+      note: fields[13] as String,
+      batchNo: fields[14] as String,
+      lowStockThreshold: fields[15] as int,
+      trackInventory: fields[16] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Medicine obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -50,7 +58,23 @@ class MedicineAdapter extends TypeAdapter<Medicine> {
       ..writeByte(7)
       ..write(obj.imagePath)
       ..writeByte(8)
-      ..write(obj.lastUpdateDate);
+      ..write(obj.lastUpdateDate)
+      ..writeByte(9)
+      ..write(obj.unitPreset)
+      ..writeByte(10)
+      ..write(obj.unitCustom)
+      ..writeByte(11)
+      ..write(obj.usageInstruction)
+      ..writeByte(12)
+      ..write(obj.specification)
+      ..writeByte(13)
+      ..write(obj.note)
+      ..writeByte(14)
+      ..write(obj.batchNo)
+      ..writeByte(15)
+      ..write(obj.lowStockThreshold)
+      ..writeByte(16)
+      ..write(obj.trackInventory);
   }
 
   @override

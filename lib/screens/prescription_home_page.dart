@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/prescription.dart';
@@ -41,19 +41,21 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
     List<Prescription> prescriptions,
   ) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
-    return prescriptions.expand((prescription) {
+
+    final list = prescriptions.expand((prescription) {
       return prescription.items
-          .where((item) {
-            return item.isScheduledOn(normalizedDate, prescription.visitDate);
-          })
-          .map((item) {
-            return _ScheduleEntry(
+          .where((item) => item.isScheduledOn(normalizedDate, prescription.visitDate))
+          .map(
+            (item) => _ScheduleEntry(
               prescription: prescription,
               item: item,
               date: normalizedDate,
-            );
-          });
+            ),
+          );
     }).toList();
+
+    list.sort((a, b) => a.item.displayName.compareTo(b.item.displayName));
+    return list;
   }
 
   Future<void> _showDailySchedule(
@@ -64,94 +66,74 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: SafeArea(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '【${_dateText(date)}】当日用药计划',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        if (entries.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Text(
-                              '今天没有需要服用的药品。',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                          )
-                        else if (entries.every((entry) => entry.isCompleted))
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 16),
-                            child: Text(
-                              '🎉 今日全部完成！继续保持~',
-                              style: TextStyle(
-                                color: Colors.green,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          )
-                        else
-                          const SizedBox.shrink(),
-                        if (entries.isNotEmpty)
-                          ...entries.map((entry) {
+            final doneCount = entries.where((e) => e.isCompleted).length;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_dateText(date)} 用药计划',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('完成：$doneCount/${entries.length}'),
+                    const SizedBox(height: 8),
+                    if (entries.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text('当天没有需要用药的项目。'),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: entries.length,
+                          itemBuilder: (context, index) {
+                            final entry = entries[index];
+                            final dosageText = entry.item.dosage.isEmpty ? '未填写' : entry.item.dosage;
+                            final frequencyText =
+                                entry.item.frequency.isEmpty ? '未填写' : entry.item.frequency;
+                            final mealText =
+                                entry.item.mealRelation.isEmpty ? '未填写' : entry.item.mealRelation;
+
                             return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              child: ListTile(
-                                title: Text(entry.item.medicineName),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: CheckboxListTile(
+                                value: entry.isCompleted,
+                                controlAffinity: ListTileControlAffinity.trailing,
+                                title: Text(entry.item.displayName),
                                 subtitle: Text(
-                                  '${entry.item.scheduleText()}  ${entry.item.durationText()}\n'
-                                  '一次：${entry.item.dosage.isEmpty ? '未填写' : entry.item.dosage}，'
-                                  '频次：${entry.item.frequency.isEmpty ? '未填写' : entry.item.frequency}，'
-                                  '时机：${entry.item.mealRelation.isEmpty ? '未填写' : entry.item.mealRelation}',
+                                  '${entry.item.scheduleText()} · ${entry.item.durationText()}\n'
+                                  '单次：$dosageText  频次：$frequencyText  时机：$mealText',
                                 ),
-                                trailing: Checkbox(
-                                  value: entry.isCompleted,
-                                  activeColor: Theme.of(
-                                    context,
-                                  ).colorScheme.primary,
-                                  onChanged: (checked) {
-                                    setModalState(() {
-                                      entry.item.toggleCompletion(date);
-                                    });
-                                    entry.prescription.save();
-                                  },
-                                ),
-                                onTap: () {
+                                onChanged: (checked) async {
+                                  if (checked == null) return;
                                   setModalState(() {
-                                    entry.item.toggleCompletion(date);
+                                    entry.item.setCompletion(date, checked);
                                   });
-                                  entry.prescription.save();
+                                  await entry.prescription.save();
+                                  if (mounted) {
+                                    setState(() {
+                                      _selectedDate = date;
+                                    });
+                                  }
                                 },
                               ),
                             );
-                          }),
-                        const SizedBox(height: 24),
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 16),
-                          child: Text(
-                            '点击卡片外部即可关闭',
-                            style: TextStyle(color: Colors.grey),
-                          ),
+                          },
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
               ),
             );
@@ -159,6 +141,10 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
         );
       },
     );
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Widget _buildRecordCard(BuildContext context, Prescription prescription) {
@@ -185,8 +171,7 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  PrescriptionDetailPage(prescription: prescription),
+              builder: (_) => PrescriptionDetailPage(prescription: prescription),
             ),
           );
         },
@@ -204,8 +189,9 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
       body: ValueListenableBuilder<Box<Prescription>>(
         valueListenable: Hive.box<Prescription>('prescriptions').listenable(),
         builder: (context, box, _) {
-          final all = box.values.toList()
-            ..sort((a, b) => b.visitDate.compareTo(a.visitDate));
+          final all = box.values.toList()..sort((a, b) => b.visitDate.compareTo(a.visitDate));
+          final selectedEntries = _scheduleEntriesForDate(_selectedDate, all);
+          final done = selectedEntries.where((e) => e.isCompleted).length;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -232,8 +218,8 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
               ),
               const SizedBox(height: 8),
               Text(
-                '当前选择日期：${_dateText(_selectedDate)}',
-                style: const TextStyle(color: Colors.grey),
+                '${_dateText(_selectedDate)} 完成情况：$done/${selectedEntries.length}',
+                style: TextStyle(color: Colors.grey.shade700),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -266,3 +252,4 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
     );
   }
 }
+

@@ -1,5 +1,4 @@
-// 文件位置：lib/models/prescription.dart
-import 'package:hive/hive.dart';
+﻿import 'package:hive/hive.dart';
 
 part 'prescription.g.dart';
 
@@ -37,6 +36,10 @@ class Prescription extends HiveObject {
   @HiveField(9)
   DateTime createdAt;
 
+  // 手动停用
+  @HiveField(10)
+  bool isStopped;
+
   Prescription({
     required this.id,
     required this.visitDate,
@@ -48,11 +51,30 @@ class Prescription extends HiveObject {
     this.careNotes = '',
     this.items = const [],
     required this.createdAt,
+    this.isStopped = false,
   });
+
+  String treatmentStatusText({DateTime? now}) {
+    if (isStopped) return '已停用';
+    final ref = now ?? DateTime.now();
+    if (items.isEmpty) return '进行中';
+
+    final anyActive = items.any((item) => item.isScheduledOn(ref, visitDate));
+    if (anyActive) return '进行中';
+
+    final started = items.any((item) {
+      final start = DateTime(visitDate.year, visitDate.month, visitDate.day);
+      final day = DateTime(ref.year, ref.month, ref.day);
+      return !day.isBefore(start);
+    });
+
+    return started ? '已结束' : '进行中';
+  }
 }
 
 @HiveType(typeId: 2)
 class PrescriptionItem {
+  // 兼容旧数据（历史字段）
   @HiveField(0)
   String medicineName;
 
@@ -71,20 +93,42 @@ class PrescriptionItem {
   @HiveField(5)
   String remark;
 
+  // daily / weekly
   @HiveField(6)
   String scheduleType;
 
+  // 1-7, Monday-Sunday
   @HiveField(7)
   List<int> weekDays;
 
   @HiveField(8)
   int durationCount;
 
+  // day / week / month / forever
   @HiveField(9)
   String durationUnit;
 
   @HiveField(10)
   List<String> completedDates;
+
+  // 可空：关联药箱ID
+  @HiveField(11)
+  String? medicineRefId;
+
+  // 必存：药方快照名称
+  @HiveField(12)
+  String medicineNameSnapshot;
+
+  // 单位：预设 + 自定义
+  @HiveField(13)
+  String unitPreset;
+
+  @HiveField(14)
+  String unitCustom;
+
+  // 自由描述
+  @HiveField(15)
+  String instructionText;
 
   PrescriptionItem({
     required this.medicineName,
@@ -96,10 +140,24 @@ class PrescriptionItem {
     this.scheduleType = 'daily',
     List<int>? weekDays,
     this.durationCount = 1,
-    this.durationUnit = '天',
+    this.durationUnit = 'week',
     List<String>? completedDates,
-  }) : weekDays = weekDays ?? [],
-       completedDates = completedDates ?? [];
+    this.medicineRefId,
+    String? medicineNameSnapshot,
+    this.unitPreset = '片',
+    this.unitCustom = '',
+    this.instructionText = '',
+  })  : weekDays = List<int>.from(weekDays ?? const <int>[]),
+        completedDates = List<String>.from(completedDates ?? const <String>[]),
+        medicineNameSnapshot =
+            (medicineNameSnapshot == null || medicineNameSnapshot.trim().isEmpty)
+                ? medicineName
+                : medicineNameSnapshot;
+
+  String get displayName =>
+      medicineNameSnapshot.trim().isNotEmpty ? medicineNameSnapshot.trim() : medicineName;
+
+  String get displayUnit => unitCustom.trim().isNotEmpty ? unitCustom.trim() : unitPreset;
 
   static String dateKey(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
@@ -112,24 +170,47 @@ class PrescriptionItem {
     return completedDates.contains(dateKey(date));
   }
 
-  void toggleCompletion(DateTime date) {
+  void setCompletion(DateTime date, bool completed) {
     final key = dateKey(date);
-    if (completedDates.contains(key)) {
-      completedDates.remove(key);
+    if (completed) {
+      if (!completedDates.contains(key)) {
+        completedDates.add(key);
+      }
     } else {
-      completedDates.add(key);
+      completedDates.remove(key);
     }
   }
 
-  DateTime? _endDate(DateTime start) {
-    if (durationUnit == '一直') return null;
-    final count = durationCount <= 0 ? 1 : durationCount;
+  String _normalizedDurationUnit() {
     switch (durationUnit) {
-      case '天':
-        return start.add(Duration(days: count - 1));
-      case '周':
-        return start.add(Duration(days: count * 7 - 1));
+      case 'forever':
+      case '一直':
+        return 'forever';
+      case 'month':
       case '月':
+        return 'month';
+      case 'week':
+      case '周':
+        return 'week';
+      case 'day':
+      case '天':
+        return 'day';
+      default:
+        return 'day';
+    }
+  }
+
+  DateTime? endDateFrom(DateTime start) {
+    final unit = _normalizedDurationUnit();
+    if (unit == 'forever') return null;
+
+    final count = durationCount <= 0 ? 1 : durationCount;
+    switch (unit) {
+      case 'day':
+        return start.add(Duration(days: count - 1));
+      case 'week':
+        return start.add(Duration(days: count * 7 - 1));
+      case 'month':
         return start.add(Duration(days: count * 30 - 1));
       default:
         return start.add(Duration(days: count - 1));
@@ -139,13 +220,14 @@ class PrescriptionItem {
   bool isScheduledOn(DateTime date, DateTime startDate) {
     final target = DateTime(date.year, date.month, date.day);
     final start = DateTime(startDate.year, startDate.month, startDate.day);
-    final end = _endDate(start);
+    final end = endDateFrom(start);
+
     if (target.isBefore(start)) return false;
     if (end != null && target.isAfter(end)) return false;
 
     if (scheduleType == 'weekly') {
-      final weekday = target.weekday; // 1 = Monday, 7 = Sunday
-      return weekDays.contains(weekday);
+      if (weekDays.isEmpty) return false;
+      return weekDays.contains(target.weekday);
     }
 
     return true;
@@ -154,19 +236,28 @@ class PrescriptionItem {
   String scheduleText() {
     if (scheduleType == 'weekly') {
       if (weekDays.isEmpty) return '每周';
-      final labels = weekDays
-          .map((day) {
-            const names = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-            return names[day - 1];
-          })
-          .join('、');
-      return '每周$labels';
+      const names = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      final labels = weekDays.where((d) => d >= 1 && d <= 7).toList()..sort();
+      final text = labels.map((d) => names[d - 1]).join('、');
+      return '每周 $text';
     }
     return '每日';
   }
 
   String durationText() {
-    if (durationUnit == '一直') return '持续：一直';
-    return '持续：$durationCount$durationUnit';
+    final unit = _normalizedDurationUnit();
+    if (unit == 'forever') return '持续：一直';
+
+    final count = durationCount <= 0 ? 1 : durationCount;
+    switch (unit) {
+      case 'day':
+        return '持续：$count 天';
+      case 'week':
+        return '持续：$count 周';
+      case 'month':
+        return '持续：$count 月';
+      default:
+        return '持续：$count 天';
+    }
   }
 }
