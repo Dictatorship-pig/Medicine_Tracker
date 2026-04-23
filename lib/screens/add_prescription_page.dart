@@ -12,8 +12,8 @@ class AddPrescriptionPage extends StatefulWidget {
 
 class _ItemDraft {
   final TextEditingController medicineName = TextEditingController();
-  final TextEditingController dosage = TextEditingController();
   final TextEditingController frequency = TextEditingController();
+  final TextEditingController dosage = TextEditingController();
   final TextEditingController days = TextEditingController();
   final TextEditingController mealRelation = TextEditingController();
   final TextEditingController remark = TextEditingController();
@@ -23,9 +23,14 @@ class _ItemDraft {
       medicineName: medicineName.text.trim(),
       dosage: dosage.text.trim(),
       frequency: frequency.text.trim(),
-      days: int.tryParse(days.text.trim()) ?? 0,
+      days: int.tryParse(days.text.trim()) ?? 1,
       mealRelation: mealRelation.text.trim(),
       remark: remark.text.trim(),
+      scheduleType: 'daily',
+      weekDays: const [],
+      durationCount: int.tryParse(days.text.trim()) ?? 1,
+      durationUnit: '天',
+      completedDates: const [],
     );
   }
 
@@ -33,8 +38,8 @@ class _ItemDraft {
 
   void dispose() {
     medicineName.dispose();
-    dosage.dispose();
     frequency.dispose();
+    dosage.dispose();
     days.dispose();
     mealRelation.dispose();
     remark.dispose();
@@ -101,11 +106,14 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final validItems = _items.where((e) => e.isMeaningful).map((e) => e.toItem()).toList();
+    final validItems = _items
+        .where((e) => e.isMeaningful)
+        .map((e) => e.toItem())
+        .toList();
     if (validItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请至少填写 1 个药品名称')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请至少填写 1 个药品名称')));
       return;
     }
 
@@ -125,9 +133,9 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     await Hive.box<Prescription>('prescriptions').add(prescription);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('药方记录已保存')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('药方记录已保存')));
     Navigator.pop(context);
   }
 
@@ -139,10 +147,7 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
   }) {
     return OutlinedButton.icon(
       onPressed: onTap,
-      icon: Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: Icon(icon),
-      ),
+      icon: Padding(padding: const EdgeInsets.only(left: 8), child: Icon(icon)),
       label: Padding(
         padding: const EdgeInsets.only(left: 8),
         child: Text('$label：$value', style: const TextStyle(fontSize: 16)),
@@ -159,12 +164,19 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text('药品 ${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(
+                  '药品 ${index + 1}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 const Spacer(),
                 if (_items.length > 1)
                   TextButton.icon(
@@ -175,46 +187,51 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                       });
                     },
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('删除', style: TextStyle(color: Colors.red)),
+                    label: const Text(
+                      '删除',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            TextFormField(
+            const SizedBox(height: 16),
+            TextField(
               controller: item.medicineName,
               decoration: const InputDecoration(
-                labelText: '药品名称（必填）',
+                labelText: '药品名称',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.medication_outlined),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: item.frequency,
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: '频次',
+                      labelText: '一天几次',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.access_time),
+                      suffixText: '次',
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
                   child: TextField(
                     controller: item.dosage,
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: '单次用量',
+                      labelText: '一次几粒',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.local_pharmacy_outlined),
+                      suffixText: '粒/片',
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -222,26 +239,35 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                     controller: item.days,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: '用药天数',
+                      labelText: '服用几天',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.date_range_outlined),
+                      suffixText: '天',
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
-                  child: TextField(
-                    controller: item.mealRelation,
+                  child: DropdownButtonFormField<String>(
                     decoration: const InputDecoration(
-                      labelText: '服药时机',
+                      labelText: '服用时机',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.restaurant_outlined),
                     ),
+                    items: const [
+                      DropdownMenuItem(value: '饭前', child: Text('饭前')),
+                      DropdownMenuItem(value: '饭后', child: Text('饭后')),
+                      DropdownMenuItem(value: '随餐', child: Text('随餐')),
+                      DropdownMenuItem(value: '空腹', child: Text('空腹')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        item.mealRelation.text = value;
+                      }
+                    },
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             TextField(
               controller: item.remark,
               decoration: const InputDecoration(
@@ -277,7 +303,9 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
               const SizedBox(height: 10),
               _buildDateButton(
                 label: '复诊日期',
-                value: _followUpDate == null ? '未设置（可为空）' : _dateText(_followUpDate!),
+                value: _followUpDate == null
+                    ? '未设置（可为空）'
+                    : _dateText(_followUpDate!),
                 onTap: _pickFollowUpDate,
               ),
               if (_followUpDate != null)
@@ -338,7 +366,10 @@ class _AddPrescriptionPageState extends State<AddPrescriptionPage> {
                 ),
               ),
               const Divider(height: 32, thickness: 1.5),
-              const Text('药品清单', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                '药品清单',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 10),
               ...List.generate(_items.length, _buildItemCard),
               OutlinedButton.icon(

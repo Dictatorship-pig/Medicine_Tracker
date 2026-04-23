@@ -12,6 +12,20 @@ class PrescriptionHomePage extends StatefulWidget {
   State<PrescriptionHomePage> createState() => _PrescriptionHomePageState();
 }
 
+class _ScheduleEntry {
+  final Prescription prescription;
+  final PrescriptionItem item;
+  final DateTime date;
+
+  _ScheduleEntry({
+    required this.prescription,
+    required this.item,
+    required this.date,
+  });
+
+  bool get isCompleted => item.isCompletedOn(date);
+}
+
 class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
   DateTime _selectedDate = DateTime.now();
 
@@ -20,6 +34,131 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
     final m = date.month.toString().padLeft(2, '0');
     final d = date.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
+  }
+
+  List<_ScheduleEntry> _scheduleEntriesForDate(
+    DateTime date,
+    List<Prescription> prescriptions,
+  ) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    return prescriptions.expand((prescription) {
+      return prescription.items
+          .where((item) {
+            return item.isScheduledOn(normalizedDate, prescription.visitDate);
+          })
+          .map((item) {
+            return _ScheduleEntry(
+              prescription: prescription,
+              item: item,
+              date: normalizedDate,
+            );
+          });
+    }).toList();
+  }
+
+  Future<void> _showDailySchedule(
+    BuildContext context,
+    DateTime date,
+    List<_ScheduleEntry> entries,
+  ) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '【${_dateText(date)}】当日用药计划',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (entries.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Text(
+                              '今天没有需要服用的药品。',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          )
+                        else if (entries.every((entry) => entry.isCompleted))
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              '🎉 今日全部完成！继续保持~',
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        if (entries.isNotEmpty)
+                          ...entries.map((entry) {
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: ListTile(
+                                title: Text(entry.item.medicineName),
+                                subtitle: Text(
+                                  '${entry.item.scheduleText()}  ${entry.item.durationText()}\n'
+                                  '一次：${entry.item.dosage.isEmpty ? '未填写' : entry.item.dosage}，'
+                                  '频次：${entry.item.frequency.isEmpty ? '未填写' : entry.item.frequency}，'
+                                  '时机：${entry.item.mealRelation.isEmpty ? '未填写' : entry.item.mealRelation}',
+                                ),
+                                trailing: Checkbox(
+                                  value: entry.isCompleted,
+                                  activeColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                  onChanged: (checked) {
+                                    setModalState(() {
+                                      entry.item.toggleCompletion(date);
+                                    });
+                                    entry.prescription.save();
+                                  },
+                                ),
+                                onTap: () {
+                                  setModalState(() {
+                                    entry.item.toggleCompletion(date);
+                                  });
+                                  entry.prescription.save();
+                                },
+                              ),
+                            );
+                          }),
+                        const SizedBox(height: 24),
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            '点击卡片外部即可关闭',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildRecordCard(BuildContext context, Prescription prescription) {
@@ -46,7 +185,8 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => PrescriptionDetailPage(prescription: prescription),
+              builder: (_) =>
+                  PrescriptionDetailPage(prescription: prescription),
             ),
           );
         },
@@ -71,7 +211,7 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
             padding: const EdgeInsets.all(16),
             children: [
               const Text(
-                '用药打卡日历（预留）',
+                '用药打卡日历',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -84,6 +224,8 @@ class _PrescriptionHomePageState extends State<PrescriptionHomePage> {
                     lastDate: DateTime(2100),
                     onDateChanged: (date) {
                       setState(() => _selectedDate = date);
+                      final entries = _scheduleEntriesForDate(date, all);
+                      _showDailySchedule(context, date, entries);
                     },
                   ),
                 ),

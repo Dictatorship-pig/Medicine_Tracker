@@ -84,13 +84,22 @@ class PrescriptionItemAdapter extends TypeAdapter<PrescriptionItem> {
       days: fields[3] as int,
       mealRelation: fields[4] as String,
       remark: fields[5] as String,
+      scheduleType: (fields[6] as String?) ?? 'daily',
+      weekDays: fields[7] != null
+          ? List<int>.from((fields[7] as List).cast<int>())
+          : <int>[],
+      durationCount: (fields[8] as int?) ?? 1,
+      durationUnit: (fields[9] as String?) ?? '天',
+      completedDates: fields[10] != null
+          ? List<String>.from((fields[10] as List).cast<String>())
+          : <String>[],
     );
   }
 
   @override
   void write(BinaryWriter writer, PrescriptionItem obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.medicineName)
       ..writeByte(1)
@@ -102,7 +111,17 @@ class PrescriptionItemAdapter extends TypeAdapter<PrescriptionItem> {
       ..writeByte(4)
       ..write(obj.mealRelation)
       ..writeByte(5)
-      ..write(obj.remark);
+      ..write(obj.remark)
+      ..writeByte(6)
+      ..write(obj.scheduleType)
+      ..writeByte(7)
+      ..write(obj.weekDays)
+      ..writeByte(8)
+      ..write(obj.durationCount)
+      ..writeByte(9)
+      ..write(obj.durationUnit)
+      ..writeByte(10)
+      ..write(obj.completedDates);
   }
 
   @override
